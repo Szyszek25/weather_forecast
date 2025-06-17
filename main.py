@@ -1,74 +1,53 @@
+"""Command line weather application."""
 
-import requests
-from urllib.parse import quote
+import argparse
 
-BASE_URL = "https://api.open-meteo.com/v1/forecast"
-
-
-def get_lat_lon(city_name):
-    """
-    Pobiera szerokość i długość geograficzną miasta korzystając z Nominatim (OpenStreetMap).
-    """
-    url = f"https://nominatim.openstreetmap.org/search?q={quote(city_name)}&format=json&limit=1"
-    try:
-        response = requests.get(url, headers={"User-Agent": "weather-app"})
-        response.raise_for_status()
-        data = response.json()
-        if data:
-            return float(data[0]['lat']), float(data[0]['lon'])
-        else:
-            print("Nie znaleziono miasta.")
-            return None, None
-    except requests.RequestException as e:
-        print(f"Błąd podczas pobierania współrzędnych: {e}")
-        return None, None
-
-def get_weather(city_name):
-    """
-    Pobiera dane pogodowe dla podanego miasta z Open-Meteo API.
-    """
-    lat, lon = get_lat_lon(city_name)
-    if lat is None or lon is None:
-        return None
-    params = {
-        'latitude': lat,
-        'longitude': lon,
-        'current_weather': 'true',
-    }
-    try:
-        response = requests.get(BASE_URL, params=params)
-        response.raise_for_status()
-        data = response.json()
-        data['city'] = city_name
-        return data
-    except requests.RequestException as e:
-        print(f"Błąd podczas pobierania danych pogodowych: {e}")
-        return None
+from weather import get_lat_lon, get_current_weather, get_daily_forecast
 
 
-def display_weather(data):
-    """
-    Wyświetla dane pogodowe w czytelny sposób.
-    """
-    if data and data.get('current_weather'):
-        city = data.get('city', 'Nieznane miasto')
-        weather = data['current_weather']
-        temp = weather['temperature']
-        wind = weather['windspeed']
-        desc = "Brak opisu (Open-Meteo nie udostępnia opisu)"
-        print(f"\nPogoda w {city}:")
-        print(f"Temperatura: {temp}°C")
-        print(f"Opis: {desc}")
-        print(f"Wiatr: {wind} km/h")
-    else:
+def display_current(city: str, data: dict):
+    """Pretty print current weather information."""
+    if not data or "current_weather" not in data:
         print("Nie udało się pobrać danych pogodowych.")
+        return
+    weather = data["current_weather"]
+    print(f"\nPogoda w {city}:")
+    print(f"Temperatura: {weather['temperature']}°C")
+    print(f"Wiatr: {weather['windspeed']} km/h")
+
+
+def display_forecast(forecast: dict):
+    """Display simple daily forecast."""
+    days = forecast.get("daily", {})
+    dates = days.get("time", [])
+    tmax = days.get("temperature_2m_max", [])
+    tmin = days.get("temperature_2m_min", [])
+    if not dates:
+        return
+    print("\nPrognoza:")
+    for date, mx, mn in zip(dates, tmax, tmin):
+        print(f"{date}: {mn}°C - {mx}°C")
 
 
 def main():
-    print("Witaj w aplikacji pogodowej!")
-    city = input("Podaj nazwę miasta: ")
-    data = get_weather(city)
-    display_weather(data)
+    parser = argparse.ArgumentParser(description="Aplikacja pogodowa")
+    parser.add_argument("city", nargs="?", help="Nazwa miasta")
+    parser.add_argument("-d", "--days", type=int, default=0,
+                        help="Liczba dni prognozy (0 = tylko bieżąca pogoda)")
+    args = parser.parse_args()
+
+    city = args.city or input("Podaj nazwę miasta: ")
+    lat, lon = get_lat_lon(city)
+    if lat is None or lon is None:
+        print("Nie znaleziono miasta.")
+        return
+
+    current = get_current_weather(lat, lon)
+    display_current(city, current)
+
+    if args.days > 0:
+        forecast = get_daily_forecast(lat, lon, args.days)
+        display_forecast(forecast)
 
 
 if __name__ == "__main__":
