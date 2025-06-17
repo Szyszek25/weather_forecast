@@ -1,40 +1,10 @@
 
 import tkinter as tk
 from tkinter import ttk, messagebox
-from urllib.parse import quote
-import requests
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw
 import io
 
-# Logika pobierania pogody (przeniesiona i dostosowana z main.py)
-BASE_URL_FORECAST = "https://api.open-meteo.com/v1/forecast"
-
-def get_lat_lon(city_name):
-    url = f"https://nominatim.openstreetmap.org/search?q={quote(city_name)}&format=json&limit=1"
-    try:
-        response = requests.get(url, headers={"User-Agent": "weather-app-gui"})
-        response.raise_for_status()
-        data = response.json()
-        if data:
-            return float(data[0]['lat']), float(data[0]['lon'])
-        return None, None
-    except requests.RequestException as e:
-        messagebox.showerror("Błąd", f"Błąd połączenia: {e}")
-        return None, None
-
-def get_weather_data(lat, lon):
-    params = {
-        'latitude': lat,
-        'longitude': lon,
-        'current_weather': 'true',
-    }
-    try:
-        response = requests.get(BASE_URL_FORECAST, params=params)
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        messagebox.showerror("Błąd", f"Błąd pobierania danych pogody: {e}")
-        return None
+from weather import get_lat_lon, get_current_weather
 
 # Główna klasa aplikacji GUI
 class WeatherApp(tk.Tk):
@@ -91,9 +61,11 @@ class WeatherApp(tk.Tk):
             messagebox.showerror("Błąd", f"Nie znaleziono miasta: {city}")
             return
 
-        weather_data = get_weather_data(lat, lon)
-        if weather_data:
+        try:
+            weather_data = get_current_weather(lat, lon)
             self.display_weather(city, weather_data)
+        except Exception as e:
+            messagebox.showerror("Błąd", f"Błąd pobierania danych pogody: {e}")
 
     def display_weather(self, city, data):
         current_weather = data.get('current_weather', {})
@@ -167,8 +139,5 @@ class WeatherApp(tk.Tk):
 
 
 if __name__ == "__main__":
-    # Potrzebny import dla rysowania ikon
-    from PIL import ImageDraw
-    
     app = WeatherApp()
     app.mainloop()
